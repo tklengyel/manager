@@ -1,16 +1,16 @@
 --
 -- Copyright (c) 2014 Citrix Systems, Inc.
--- 
+--
 -- This program is free software; you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
 -- the Free Software Foundation; either version 2 of the License, or
 -- (at your option) any later version.
--- 
+--
 -- This program is distributed in the hope that it will be useful,
 -- but WITHOUT ANY WARRANTY; without even the implied warranty of
 -- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 -- GNU General Public License for more details.
--- 
+--
 -- You should have received a copy of the GNU General Public License
 -- along with this program; if not, write to the Free Software
 -- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -553,7 +553,7 @@ implementationFor xm uuid = self where
   , comCitrixXenclientXenmgrVmUnrestrictedGetPrivateSpace = fromIntegral <$> getVmPrivateSpaceUsedMiB uuid
 
   , comCitrixXenclientXenmgrVmProductGetOvfEnvXml = liftIO (getOvfEnvXml uuid)
-  , comCitrixXenclientXenmgrVmProductListProductProperties = map productPropertyKV <$> vmPPList uuid 
+  , comCitrixXenclientXenmgrVmProductListProductProperties = map productPropertyKV <$> vmPPList uuid
   , comCitrixXenclientXenmgrVmProductGetProductProperty = \p -> vmPPGetValue uuid (PPUniqueID p)
   , comCitrixXenclientXenmgrVmProductSetProductProperty = \p v -> vmPPSetValue uuid (PPUniqueID p) v
 
@@ -651,6 +651,11 @@ implementationFor xm uuid = self where
   , comCitrixXenclientXenmgrVmSetSerial = restrict' $ setVmSerial uuid
   , comCitrixXenclientXenmgrVmUnrestrictedSetSerial = setVmSerial uuid
 
+  , comCitrixXenclientXenmgrVmGetBios = getVmBios uuid
+  , comCitrixXenclientXenmgrVmUnrestrictedGetBios = getVmBios uuid
+  , comCitrixXenclientXenmgrVmSetBios = restrict' $ setVmBios uuid
+  , comCitrixXenclientXenmgrVmUnrestrictedSetBios = setVmBios uuid
+
   } where
     stom "" = Nothing
     stom x  = Just x
@@ -671,7 +676,7 @@ implementationFor xm uuid = self where
 productPropertyKV :: ProductProperty -> M.Map String String
 productPropertyKV pp = M.fromList [
     ("id", strPPUniqueID (ppUniqueID pp))
-  , ("type", strPPT (ppType pp))  
+  , ("type", strPPT (ppType pp))
   , ("key", ppKey pp)
   , ("class", ppClass pp)
   , ("instance", ppInstance pp)
@@ -841,7 +846,7 @@ _list_firewall_rules uuid = mapM entry =<< dbList ("/vm/" ++ show uuid ++ "/fire
       where
         r :: String -> Rpc String
         r p = dbRead (firerulePath uuid (read ruleid) ++ "/" ++ p)
-  
+
 getDomstoreReadAccess uuid = readConfigPropertyDef uuid vmDomstoreReadAccess False
 getDomstoreWriteAccess uuid = readConfigPropertyDef uuid vmDomstoreWriteAccess False
 

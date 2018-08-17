@@ -1,16 +1,16 @@
 --
 -- Copyright (c) 2014 Citrix Systems, Inc.
--- 
+--
 -- This program is free software; you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
 -- the Free Software Foundation; either version 2 of the License, or
 -- (at your option) any later version.
--- 
+--
 -- This program is distributed in the hope that it will be useful,
 -- but WITHOUT ANY WARRANTY; without even the implied warranty of
 -- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 -- GNU General Public License for more details.
--- 
+--
 -- You should have received a copy of the GNU General Public License
 -- along with this program; if not, write to the Free Software
 -- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -123,6 +123,7 @@ module Vm.Queries
                , getVmTimerMode
                , getVmNestedHvm
                , getVmSerial
+               , getVmBios
                ) where
 
 import Data.String
@@ -339,7 +340,7 @@ getVmStartupDisks uuid = do
            , diskSha1Sum = Nothing
            , diskShared = False
            , diskManagedType = UnmanagedDisk }
-      
+
 getVms :: (MonadRpc e m) => m [Uuid]
 getVms = correctVms
 
@@ -643,11 +644,11 @@ getVmDiskVirtualSizeMB uuid disk_id =
          then (read . chomp <$> readProcessOrDie "vhd-util" ["query", "-v", "-n", diskPath disk] "")
               `orElseIfException` return 0
          else return 0
-     
+
 getVmDiskPhysicalUtilizationBytes :: MonadRpc XmError m => Uuid -> DiskID -> m Integer
 getVmDiskPhysicalUtilizationBytes uuid disk_id =
   do disk <- getDisk' uuid disk_id
-     liftIO $ 
+     liftIO $
        if (diskType disk == VirtualHardDisk)
          then (read . chomp <$> (readProcessOrDie "vhd-util" ["query", "-s", "-n", diskPath disk] ""))
               `orElseIfException` return 0
@@ -1030,3 +1031,4 @@ getVmHpet uuid = readConfigPropertyDef uuid vmHpet vmHpetDefault
 getVmTimerMode uuid = readConfigPropertyDef uuid vmTimerMode vmTimerModeDefault
 getVmNestedHvm uuid = readConfigPropertyDef uuid vmNestedHvm False
 getVmSerial uuid = readConfigPropertyDef uuid vmSerial ""
+getVmBios uuid = readConfigPropertyDef uuid vmBios ""

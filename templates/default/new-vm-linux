@@ -25,6 +25,7 @@
     "memory": "1024",
     "display": "none",
     "boot": "cd",
+    "bios": "ovmf",
     "flask-label": "system_u:system_r:hvm_guest_t",
     "disk": {
       "0": {

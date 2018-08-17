@@ -1,16 +1,16 @@
 --
 -- Copyright (c) 2014 Citrix Systems, Inc.
--- 
+--
 -- This program is free software; you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
 -- the Free Software Foundation; either version 2 of the License, or
 -- (at your option) any later version.
--- 
+--
 -- This program is distributed in the hope that it will be useful,
 -- but WITHOUT ANY WARRANTY; without even the implied warranty of
 -- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 -- GNU General Public License for more details.
--- 
+--
 -- You should have received a copy of the GNU General Public License
 -- along with this program; if not, write to the Free Software
 -- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -114,6 +114,7 @@ module Vm.Actions
           , setVmTimerMode
           , setVmNestedHvm
           , setVmSerial
+          , setVmBios
           , setVmAutolockCdDrives
           , cleanupV4VDevice
           , EventHookFailMode(..)
@@ -256,12 +257,12 @@ parseEventHook s = parse s where
   parse "" = Nothing
   parse s | "rpc:" `isPrefixOf` s = rpc (drop 4 s) -- assume rpc call
   parse s = return (EventScript s) -- assume script file
-  
+
   rpc s = do
     let kv      = keyvals (filter (not . isSpace) s)
         objpath = fromMaybe "/" ("objpath" `M.lookup` kv)
         vm      = fromString <$> "vm" `M.lookup` kv
-        
+
     dest <- "destination" `M.lookup` kv
     interface <- "interface" `M.lookup` kv
     member <- "member" `M.lookup` kv
@@ -447,7 +448,7 @@ removeVm uuid =
        -- Away from database
        dbRm $ "/vm/" ++ show uuid
        dbRm $ "/dom-store/" ++ show uuid
-       
+
        -- Need to quit xenvm
        -- FIXME: cleanly stop monitoring events
        removeDefaultEvents uuid	--cleanly...stop monitoring events
@@ -523,7 +524,7 @@ startVmInternal uuid is_reboot = do
         else return ()
 
     --Filter function to match on domain:bus and also filter out the video function
-    bdFilter match bdf d = (isInfixOf match (show (devAddr d))) && (bdf /= (show (devAddr d))) 
+    bdFilter match bdf d = (isInfixOf match (show (devAddr d))) && (bdf /= (show (devAddr d)))
 
     --Check if vm has a bdf in gpu
     isGpuPt uuid = do
@@ -748,15 +749,15 @@ setupV4VDevice uuid =
 
 cleanupV4VDevice domid = liftIO $ do
     xsRm (xsp_dom0 ++ "/backend/v4v/" ++ show domid)
-   
-setupAcpiNode uuid = 
+
+setupAcpiNode uuid =
   whenDomainID_ uuid $ \domid -> do
      stubdom <- getStubDomainID uuid
      liftIO $ xsWrite (xsp domid ++ "/acpi-state") ("")
      case stubdom of
          Just stubdomid -> liftIO $ xsChmod (xsp domid ++ "/acpi-state") ("b" ++ show stubdomid)
          Nothing        -> liftIO $ xsChmod (xsp domid ++ "/acpi-state") ("b" ++ show domid)
- 
+
 --Watch acpi state when booting a VM, used to be handled in xenvm
 monitorAcpi :: Uuid -> VmMonitor -> AcpiState -> IO ()
 monitorAcpi uuid m state = do
@@ -779,7 +780,7 @@ createSnapshot disk encrypted = do
     let path = diskPath disk
     let splitPath = split '/' path
     let newname = "snap_" ++ (last splitPath) ++ ".snap.tmp.vhd"
-    let newPath = intercalate "/" $ (init splitPath) ++ [newname] 
+    let newPath = intercalate "/" $ (init splitPath) ++ [newname]
     exists <- liftIO $ doesFileExist newPath --ensure we're creating a fresh snapshot
     when exists (removeFile newPath)
     if encrypted then createEnc path newPath else create path newPath
@@ -856,8 +857,8 @@ bootVm config reboot
                   then return False
                   else liftIO (doesFileExist suspend_file)
            if not exists
-                then do 
-                  if reboot 
+                then do
+                  if reboot
                     then do liftIO $ Xl.signal uuid
                     else do liftIO $ Xl.start uuid --we start paused by default
                 else do liftIO $ xsWrite (vmSuspendImageStatePath uuid) "resume"
@@ -926,7 +927,7 @@ bootVm config reboot
         waitForVmInternalState uuid Created Running 30
         -- BEFORE DEVICE MODEL
         info $ "pre-dm setup for " ++ show uuid
-        liftRpc $ do 
+        liftRpc $ do
           twiddlePermissions uuid
           setupCDDrives uuid
           --No longer passing v4v in the config, keep in db.
@@ -947,12 +948,12 @@ bootVm config reboot
           vkb_enabled <- getVmVkbd uuid
           when vkb_enabled $ inputDbusCalls uuid
           info $ "done pre-dm setup for " ++ show uuid
-         
+
         waitForVmInternalState uuid Created Running 60
         sentinel <- sentinelPath
         -- allow writing to sentinel
         maybe (return()) (\p -> liftIO $ xsWrite p "" >> xsChmod p "b0") sentinel
-        
+
         -- AFTER DOMAIN CREATION
         liftRpc $ do
           -- assign sticky cd drives
@@ -960,16 +961,16 @@ bootVm config reboot
           info $ "unpause " ++ show uuid
           liftIO $ Xl.unpause uuid
         -- wait for bootup services to complete if using sentinel
-        maybe (return()) (\p -> liftIO 
-                            . void 
-                            . timeout (10^6 * 60) 
-                            . xsWaitFor p 
-                            $ ((\v -> isJust v && v /= Just "") `fmap` xsRead p) 
+        maybe (return()) (\p -> liftIO
+                            . void
+                            . timeout (10^6 * 60)
+                            . xsWaitFor p
+                            $ ((\v -> isJust v && v /= Just "") `fmap` xsRead p)
                      ) sentinel
-        
+
         applyVmBackendShift uuid
         return ()
-      
+
       sentinelPath = do
         domid <- getDomainID uuid
         case domid of
@@ -1226,10 +1227,10 @@ doVmFirewallRules message which =
         (vms, vms') <- which
         seamlessVms <- getSeamlessVms
 
-        info $ "firewall rule delta vms:" 
+        info $ "firewall rule delta vms:"
         info $ "BEFORE: " ++ show vms
         info $ "NOW: " ++ show vms
-        
+
         let reduce vms ((Firewall.ActiveVm _ _ vm _ _), rule) =
                 Firewall.reduce (Firewall.ReduceContext vm seamlessVms vms) [rule]
             vm_rules = mapM (getEffectiveVmFirewallRules . Firewall.vmUuid)
@@ -1261,7 +1262,7 @@ getActiveVm uuid = do
   return . fmap (\domid -> Firewall.ActiveVm domid stubdom uuid typ name) . fmap read $ maybe_domid
   where typStr (ServiceVm tag) = tag
         typStr Svm = "svm"
-    
+
 mapMaybeM :: Monad m => (a -> m (Maybe b)) -> [a] -> m [b]
 mapMaybeM op = liftM catMaybes . mapM op
 
@@ -1371,7 +1372,7 @@ removeDiskFromVm uuid id = withVmDbLock . liftRpc $
            let disks' = M.delete id disks
            removeDiskFiles uuid d
            saveConfigProperty uuid vmDisks disks'
-       
+
 removeDiskFiles :: Uuid -> Disk -> Rpc ()
 removeDiskFiles uuid d = removeVhd d where
     removeVhd d
@@ -1563,7 +1564,7 @@ tapCreateForVm :: Uuid -> Bool -> FilePath -> Rpc FilePath
 tapCreateForVm uuid ro path = do
   env <- tapEnvForVm uuid
   liftIO $ tapCreateVhd env ro path
-  
+
 -- Computer sha1 sum for disk. Has to be through tap device because the vhd file changes
 -- even for completely readonly fs
 computeDiskSha1Sum :: Uuid -> Disk -> Rpc Integer
@@ -1572,7 +1573,7 @@ computeDiskSha1Sum vm_uuid d
         do tapdev <- tapCreateForVm vm_uuid True (diskPath d)
            liftIO $
              E.finally (fileSha1Sum tapdev) (spawnShell' $ "tap-ctl destroy -d " ++ tapdev)
-    | diskType d == Aio = liftIO $ 
+    | diskType d == Aio = liftIO $
         do tapdev <- fromMaybe (error $ "FAILED to create tap device for " ++ diskPath d ++ ", possibly in use?")
                      . fmap chomp
                     <$> (spawnShell' $ "tap-ctl create -a aio:" ++ (diskPath d))
@@ -1600,7 +1601,7 @@ parseKernelExtract p
 -- Assumes that kernel is stored in disk of id 0 for that vm
 extractKernelFromPvDomain :: Uuid -> Rpc ()
 extractKernelFromPvDomain uuid = join $ extractFileFromPvDomain <$> getVmKernelPath uuid <*> getVmKernelExtract uuid <*> pure uuid
-extractInitrdFromPvDomain :: Uuid -> Rpc ()  
+extractInitrdFromPvDomain :: Uuid -> Rpc ()
 extractInitrdFromPvDomain uuid = do
   initrd <- getVmInitrd uuid
   let initrd' = case initrd of
@@ -1862,7 +1863,7 @@ setVmIcbinnPath uuid v = saveConfigProperty uuid vmIcbinnPath (v::String)
 setVmOvfTransportIso uuid = saveConfigProperty uuid vmOvfTransportIso
 setVmDownloadProgress uuid v = do
   dbWrite ("/vm/"++show uuid++"/download-progress") (v::Int)
-  notifyVmTransferChanged uuid  
+  notifyVmTransferChanged uuid
 setVmReady uuid v = saveConfigProperty uuid vmReady (v::Bool)
 setVmVkbd uuid v = saveConfigProperty uuid vmVkbd (v::Bool)
 setVmVfb uuid v = saveConfigProperty uuid vmVfb (v::Bool)
@@ -1875,6 +1876,7 @@ setVmHpet uuid v = saveConfigProperty uuid vmHpet (v::Bool)
 setVmTimerMode uuid v = saveConfigProperty uuid vmTimerMode (v::String)
 setVmNestedHvm uuid v = saveConfigProperty uuid vmNestedHvm (v::Bool)
 setVmSerial uuid v = saveConfigProperty uuid vmSerial (v::String)
+setVmBios uuid v = saveConfigProperty uuid vmBios (v::String)
 
 -- set autolock flag on the vm xenstore tree, per cd device
 -- cd devices which have sticky bit are not subject to autolock ever

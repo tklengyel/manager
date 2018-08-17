@@ -1,16 +1,16 @@
 --
 -- Copyright (c) 2014 Citrix Systems, Inc.
--- 
+--
 -- This program is free software; you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
 -- the Free Software Foundation; either version 2 of the License, or
 -- (at your option) any later version.
--- 
+--
 -- This program is distributed in the hope that it will be useful,
 -- but WITHOUT ANY WARRANTY; without even the implied warranty of
 -- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 -- GNU General Public License for more details.
--- 
+--
 -- You should have received a copy of the GNU General Public License
 -- along with this program; if not, write to the Free Software
 -- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -80,6 +80,7 @@ module Vm.Config (
                 , vmTimerMode, vmTimerModeDefault
                 , vmNestedHvm
                 , vmSerial
+                , vmBios
                 ) where
 
 import Control.Arrow
@@ -239,7 +240,7 @@ instance Marshall Disk where
                      dbWrite (x ++ "/snapshot") (diskSnapshotMode v)
                      dbWrite (x ++ "/sha1sum" ) (diskSha1Sum      v)
                      dbWrite (x ++ "/shared" ) (diskShared v)
-                     when (diskEnabled v /= diskEnabled current) $ 
+                     when (diskEnabled v /= diskEnabled current) $
                        dbWrite (x ++ "/enable") (diskEnabled v)
 
 -- NIC definition can be marshalled
@@ -267,7 +268,7 @@ instance Marshall NicDef where
                         _ -> fmap id bname
                       , nicdefBackendDomid = Nothing
                       , nicdefEnable       = enable
-                      , nicdefMac          = mac 
+                      , nicdefMac          = mac
                       , nicdefModel        = model }
 
     dbWrite x v = do current <- dbRead x
@@ -454,6 +455,7 @@ vmNestedHvm = property "config.nestedhvm"
 vmSerial = property "config.serial"
 vmStubdomMemory = property "config.stubdom-memory"
 vmStubdomCmdline = property "config.stubdom-cmdline"
+vmBios = property "config.bios"
 
 -- Composite ones and lists
 vmExtraHvms    = property "config.extra-hvm"
@@ -595,7 +597,7 @@ diskSpecs cfg = do
     disks       = filter diskEnabled <$> validDisks cfg
     uuid        = vmcfgUuid cfg
 
-bsgSpec :: VmConfig -> Rpc [Param] 
+bsgSpec :: VmConfig -> Rpc [Param]
 bsgSpec cfg = do
     cdromA   <- policyQueryCdAccess uuid
     cdromR   <- policyQueryCdRecording uuid
@@ -760,7 +762,7 @@ miscSpecs cfg = do
         ++ ["memory="++show (vmcfgMemoryMib cfg) ]
         ++ ["maxmem="++show (vmcfgMemoryStaticMaxMib cfg) ]
         ++ snd ++ coresPSpms
-        ++ stubdom_ ++ cpuidResponses cfg ++ usb ++ platform ++ other               
+        ++ stubdom_ ++ cpuidResponses cfg ++ usb ++ platform ++ other
         ++ hpet_
         ++ timer_mode_
         ++ nested_
@@ -794,7 +796,7 @@ miscSpecs cfg = do
             True  -> do exists <- doesFileExist "/sys/firmware/acpi/tables/SLIC"
                         if exists then return [ "acpi_firmware='/sys/firmware/acpi/tables/SLIC'" ] else do info $ "SLIC table missing"
                                                                                                            return []
-            
+
       -- Activate sound
       sound = maybeToList . fmap (("soundhw='"++) <$> (++"'")) <$> readConfigProperty uuid vmSound
 
@@ -847,6 +849,7 @@ miscSpecs cfg = do
           , ("stubdom_memory"  , vmStubdomMemory)   --OXT-1220: iomem and ioports should be reworked to support specifying multiple
           , ("iomem"           , vmPassthroughMmio) --ranges at a finer granularity. Few ways to implement, likely as a db-node with
           , ("ioports"         , vmPassthroughIo)   --each range as an entry beneath it, which is read and parsed during xl cfg generation.
+          , ("bios"            , vmBios)
           ]                                         --Remove this comment block when implemented.
 
       -- xl config handles certain options different than others (eg. quotes, brackets)
@@ -870,6 +873,7 @@ miscSpecs cfg = do
                                                            _  -> name ++ "=" ++ (wrapQuotes v)
                                              "seclabel" -> name ++ "=" ++ (wrapQuotes v)
                                              "boot"     -> name ++ "=" ++ (wrapQuotes v)
+                                             "bios"     -> name ++ "=" ++ (wrapQuotes v)
                                              "stubdom_cmdline" -> name ++ "=" ++ (wrapQuotes v)
                                              _          -> name ++ "=" ++ v) <$>
                                 readConfigProperty uuid prop
