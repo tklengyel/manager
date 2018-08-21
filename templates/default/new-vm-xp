@@ -7,10 +7,11 @@
     "3": "my-stubdom -> 0:5001",
     "4": "my-stubdom -> 0:5100"
   },
-  "os": "windows",
-  "description": "Windows XP",
+  "os": "windows8",
+  "description": "Windows 8/10",
   "ui-selectable": "true",
   "stubdom": "true",
+  "restrict-display-depth": "true",
   "config": {
     "notify": "dbus",
     "hvm": "true",
@@ -22,7 +23,7 @@
     "nx": "true",
     "v4v": "true",
     "sound": "ac97",
-    "memory": "1024",
+    "memory": "2048",
     "display": "none",
     "boot": "cd",
     "flask-label": "system_u:system_r:hvm_guest_t",
