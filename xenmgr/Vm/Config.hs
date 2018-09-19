@@ -770,7 +770,6 @@ miscSpecs cfg = do
     usb      <- usb_opts
     hpet_    <- hpet
     timer_mode_ <- timer_mode
-    nested_ <- nested
     dm_override_ <- liftRpc dm_override
     dm_display_ <- liftRpc dm_display
     extra_hvms <- readConfigPropertyDef uuid vmExtraHvms []
@@ -785,7 +784,6 @@ miscSpecs cfg = do
         ++ stubdom_ ++ cpuidResponses cfg ++ usb ++ platform ++ other               
         ++ hpet_
         ++ timer_mode_
-        ++ nested_
         ++ dm_override_
         ++ dm_display_
         ++ acpi_table_
@@ -805,8 +803,6 @@ miscSpecs cfg = do
       timer_mode = do
         mode <- readConfigPropertyDef uuid vmTimerMode vmTimerModeDefault
         if isHvm cfg then return ["timer_mode=" ++ (show mode)] else return []
-      nested = readConfigPropertyDef uuid vmNestedHvm False >>=
-                   \ v -> if v then return ["nested=true"] else return []
 
       acpi_table = do
           case (vmcfgAcpi cfg) of
@@ -863,6 +859,7 @@ miscSpecs cfg = do
           , ("iomem"           , vmPassthroughMmio) --ranges at a finer granularity. Few ways to implement, likely as a db-node with
           , ("ioports"         , vmPassthroughIo)   --each range as an entry beneath it, which is read and parsed during xl cfg generation.
           , ("bios"            , vmBios)
+          , ("nestedhvm"       , vmNestedHvm)
           ]                                         --Remove this comment block when implemented.
 
       -- xl config handles certain options different than others (eg. quotes, brackets)
